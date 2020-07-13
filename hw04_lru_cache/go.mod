@@ -1,4 +1,4 @@
-module github.com/a1ekaeyVorobyev/otus_golang_hw/hw04_lru_cache
+module github.com/a1ekaeyVorobyev/otus-hw-go/hw04_lru_cache
 
 go 1.14
 
