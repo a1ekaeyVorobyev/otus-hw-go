@@ -12,10 +12,15 @@ import (
 func TestCopy(t *testing.T) {
 	nameFileSource, nameFileDestination, limit, offset, err := generateTempFile()
 	require.NoError(t, err)
+	fileSource, err := os.Open(nameFileSource)
+	fs, _ := fileSource.Stat()
+	sizeFileSource := fs.Size()
+	fileSource.Close()
 	defer os.Remove(nameFileDestination)
 	defer os.Remove(nameFileSource)
 	t.Run("Full Copy", func(t *testing.T) {
-		Copy(nameFileSource, nameFileDestination, 0, 0)
+		err := Copy(nameFileSource, nameFileDestination, 0, 0)
+		require.NoError(t, err)
 		expectedBuf, err := ioutil.ReadFile(nameFileSource)
 		require.NoError(t, err)
 		actualBuf, err := ioutil.ReadFile(nameFileDestination)
@@ -23,7 +28,8 @@ func TestCopy(t *testing.T) {
 		require.Equal(t, expectedBuf, actualBuf)
 	})
 	t.Run("Copy with  limit", func(t *testing.T) {
-		Copy(nameFileSource, nameFileDestination, 0, limit)
+		err = Copy(nameFileSource, nameFileDestination, 0, limit)
+		require.NoError(t, err)
 		expectedBuf, err := ioutil.ReadFile(nameFileSource)
 		require.NoError(t, err)
 		actualBuf, err := ioutil.ReadFile(nameFileDestination)
@@ -31,7 +37,8 @@ func TestCopy(t *testing.T) {
 		require.Equal(t, expectedBuf[:limit], actualBuf)
 	})
 	t.Run("Copy with  offset", func(t *testing.T) {
-		Copy(nameFileSource, nameFileDestination, offset, 0)
+		err = Copy(nameFileSource, nameFileDestination, offset, 0)
+		require.NoError(t, err)
 		expectedBuf, err := ioutil.ReadFile(nameFileSource)
 		require.NoError(t, err)
 		actualBuf, err := ioutil.ReadFile(nameFileDestination)
@@ -39,14 +46,27 @@ func TestCopy(t *testing.T) {
 		require.Equal(t, expectedBuf[offset:], actualBuf)
 	})
 	t.Run("Copy with  offset and limit", func(t *testing.T) {
-		Copy(nameFileSource, nameFileDestination, offset, limit)
+		err = Copy(nameFileSource, nameFileDestination, offset, limit)
+		require.NoError(t, err)
 		expectedBuf, err := ioutil.ReadFile(nameFileSource)
 		require.NoError(t, err)
 		actualBuf, err := ioutil.ReadFile(nameFileDestination)
 		require.NoError(t, err)
 		require.Equal(t, expectedBuf[offset:][:limit], actualBuf)
 	})
-
+	t.Run("Copy with  offset and huge limit", func(t *testing.T) {
+		err = Copy(nameFileSource, nameFileDestination, offset, sizeFileSource)
+		require.NoError(t, err)
+		expectedBuf, err := ioutil.ReadFile(nameFileSource)
+		require.NoError(t, err)
+		actualBuf, err := ioutil.ReadFile(nameFileDestination)
+		require.NoError(t, err)
+		require.Equal(t, expectedBuf[offset:], actualBuf)
+	})
+	t.Run("Error offset", func(t *testing.T) {
+		err = Copy(nameFileSource, nameFileDestination, sizeFileSource, 0)
+		require.Equal(t, err, ErrOffsetExceedsFileSize)
+	})
 }
 
 func encode(s []string) []byte {
