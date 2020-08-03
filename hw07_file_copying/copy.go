@@ -16,7 +16,6 @@ var (
 
 func Copy(fromPath string, toPath string, offset, limit int64) error {
 	// Place your code here
-	var reader, barReader io.Reader
 	fileSource, err := os.Open(fromPath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -47,10 +46,10 @@ func Copy(fromPath string, toPath string, offset, limit int64) error {
 
 	fmt.Printf("Coping file %v to file %v\n", fromPath, toPath)
 	bar := pb.Full.Start64(limit)
-	reader = io.LimitReader(fileSource, limit)
-	barReader = bar.NewProxyReader(reader)
+	reader := io.LimitReader(fileSource, limit)
+	barReader := bar.NewProxyReader(reader)
 	_, err = io.Copy(fileDestination, barReader)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return err
 	}
 	bar.Finish()
