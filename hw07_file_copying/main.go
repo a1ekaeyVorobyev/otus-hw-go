@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"os"
 )
 
 var (
@@ -19,4 +21,18 @@ func init() {
 func main() {
 	flag.Parse()
 	// Place your code here
+	if from == "" {
+		fmt.Println("Not Name File Source;")
+		os.Exit(1)
+	}
+	if to == "" {
+		fmt.Println("Not Name File Destination;")
+		os.Exit(1)
+	}
+
+	if err := Copy(from, to, offset, limit); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
