@@ -1,12 +1,11 @@
-// +build generation
-
-package models
+package main
 
 import (
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"syreclabs.com/go/faker"
 )
 
 type Validated interface {
@@ -61,7 +60,33 @@ func TestUserValidation(t *testing.T) {
 
 	t.Run("phones slice", func(t *testing.T) {
 		// Write me :)
-		t.Fail()
+		u := goodUser
+		phone := make([]string, 5, 5)
+		for i := range phone {
+			phone[i] = faker.RandomString(11)
+		}
+		ve, err := u.Validate()
+		require.Nil(t, err)
+
+		phone = make([]string, 20, 20)
+		for i := range phone {
+			r := faker.RandomInt(8, 15)
+			phone[i] = faker.RandomString(r)
+		}
+		u.Phones = phone
+		u.Phones = phone
+		ve, err = u.Validate()
+		k := 0
+		for i := range phone {
+			if len(phone[i]) != 11 {
+				require.Equal(t, ve[k].Field, "Phones")
+				s := "Phones does not fulfill the condition tag = len:11. Value Phones = " + phone[i]
+				require.Equal(t, ve[k].Err.Error(), s)
+				k++
+			}
+		}
+		require.Equal(t, len(ve), k)
+		//t.Fail()
 	})
 
 	t.Run("many errors", func(t *testing.T) {

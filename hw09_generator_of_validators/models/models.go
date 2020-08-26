@@ -1,4 +1,6 @@
-package models
+//go:generate go-validate $GOFILE
+
+package main
 
 type UserRole string
 
