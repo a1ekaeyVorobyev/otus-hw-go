@@ -1,18 +1,13 @@
 package hw06_pipeline_execution //nolint:golint,stylecheck
 
 type (
-	// In  - input chanel from stage
-	In = <-chan interface{}
-	// Out  - output chanel from stage
+	In  = <-chan interface{}
 	Out = In
-	// Bi  - output chanel from stage
-	Bi = chan interface{}
+	Bi  = chan interface{}
 )
 
-// Stage prototype func use from stage
 type Stage func(in In) (out Out)
 
-// ExecutePipeline - func execute Sage
 func ExecutePipeline(in In, done In, stages ...Stage) Out {
 	// Place your code here
 	doneChanel := make(chan struct{})
@@ -39,5 +34,6 @@ func ExecutePipeline(in In, done In, stages ...Stage) Out {
 		}(newIn, out)
 		out = stage(newIn)
 	}
+
 	return out
 }

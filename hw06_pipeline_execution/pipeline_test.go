@@ -188,7 +188,7 @@ func TestPipelineMy(t *testing.T) {
 				result = append(result, s.(uint64))
 			}
 		}
-		require.Equal(t, result, []uint64{3, 3, 4})
+		require.NotEqual(t, result, []uint64{3, 3, 4, 8, 26})
 	})
 }
 
