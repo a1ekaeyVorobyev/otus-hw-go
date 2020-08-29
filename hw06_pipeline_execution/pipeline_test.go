@@ -2,6 +2,7 @@ package hw06_pipeline_execution //nolint:golint,stylecheck
 
 import (
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -166,6 +167,7 @@ func TestPipelineMy(t *testing.T) {
 	})
 
 	t.Run("Check Done", func(t *testing.T) {
+		var mutex = &sync.Mutex{}
 		in := make(Bi)
 		done := make(Bi)
 		data := []uint64{0, 1, 2, 3, 4}
@@ -178,7 +180,9 @@ func TestPipelineMy(t *testing.T) {
 				}
 				in <- v
 			}
+			mutex.Lock()
 			flag = false
+			mutex.Unlock()
 			close(in)
 		}()
 		result := make([]uint64, 0, 3)
