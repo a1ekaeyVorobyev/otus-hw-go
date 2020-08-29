@@ -1,8 +1,8 @@
 package hw06_pipeline_execution //nolint:golint,stylecheck
 
 import (
+	"fmt"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -167,33 +167,40 @@ func TestPipelineMy(t *testing.T) {
 	})
 
 	t.Run("Check Done", func(t *testing.T) {
-		var mutex = &sync.Mutex{}
 		in := make(Bi)
 		done := make(Bi)
 		data := []uint64{0, 1, 2, 3, 4}
 		flag := true
+
 		go func() {
 			for i, v := range data {
 				if i == 3 {
-					done <- v
-					break
+					done <- 5
 				}
 				in <- v
 			}
-			mutex.Lock()
 			flag = false
-			mutex.Unlock()
 			close(in)
 		}()
-		result := make([]uint64, 0, 3)
+		result := make([]uint64, 0, len(data))
 		stage := []Stage{g, g1}
 		for flag {
 			for s := range ExecutePipeline(in, done, stage...) {
 				result = append(result, s.(uint64))
 			}
 		}
-		require.NotEqual(t, result, []uint64{3, 3, 4, 8, 26})
+		close(done)
+		fmt.Println(result)
+		require.NotEqual(t, result, []uint64{3, 3, 4, 8, 26, 1})
 	})
+}
+
+func Factorial(n uint64) (result uint64) {
+	if n > 0 {
+		result = n * Factorial(n-1)
+		return result
+	}
+	return 1
 }
 
 func IsClosed(ch Bi) bool {
@@ -204,12 +211,4 @@ func IsClosed(ch Bi) bool {
 	}
 
 	return false
-}
-
-func Factorial(n uint64) (result uint64) {
-	if n > 0 {
-		result = n * Factorial(n-1)
-		return result
-	}
-	return 1
 }
