@@ -91,3 +91,121 @@ func TestPipeline(t *testing.T) {
 		require.Less(t, int64(elapsed), int64(abortDur)+int64(fault))
 	})
 }
+
+func TestPipelineMy(t *testing.T) {
+	// Stage generator
+	g := func(in In) Out {
+		out := make(Bi)
+		go func() {
+			defer func() {
+				if !IsClosed(out) {
+					close(out)
+				}
+			}()
+			for v := range in {
+				out <- Factorial(v.(uint64))
+			}
+		}()
+		return out
+	}
+
+	g1 := func(in In) Out {
+		out := make(Bi)
+		go func() {
+			defer func() {
+				if !IsClosed(out) {
+					close(out)
+				}
+			}()
+			for v := range in {
+				out <- (v.(uint64) + 2)
+			}
+		}()
+		return out
+	}
+
+	t.Run("Check Stage", func(t *testing.T) {
+		in := make(Bi)
+		data := []uint64{0, 1, 2, 3, 4}
+		flag := true
+		go func() {
+			for _, v := range data {
+				in <- v
+			}
+			flag = false
+			close(in)
+		}()
+		result := make([]uint64, 0, len(data))
+		for flag {
+			for s := range g(in) {
+				result = append(result, s.(uint64))
+			}
+		}
+		require.Equal(t, result, []uint64{1, 1, 2, 6, 24})
+	})
+
+	t.Run("Check Gage", func(t *testing.T) {
+		in := make(Bi)
+		data := []uint64{0, 1, 2, 3, 4}
+		flag := true
+		go func() {
+			for _, v := range data {
+				in <- v
+			}
+			flag = false
+			close(in)
+		}()
+		result := make([]uint64, 0, len(data))
+		stage := []Stage{g, g1}
+		for flag {
+			for s := range ExecutePipeline(in, nil, stage...) {
+				result = append(result, s.(uint64))
+			}
+		}
+		require.Equal(t, result, []uint64{3, 3, 4, 8, 26})
+	})
+
+	t.Run("Check Done", func(t *testing.T) {
+		in := make(Bi)
+		done := make(Bi)
+		data := []uint64{0, 1, 2, 3, 4}
+		flag := true
+		go func() {
+			for i, v := range data {
+				if i == 3 {
+					done <- v
+					break
+				}
+				in <- v
+			}
+			flag = false
+			close(in)
+		}()
+		result := make([]uint64, 0, 3)
+		stage := []Stage{g, g1}
+		for flag {
+			for s := range ExecutePipeline(in, done, stage...) {
+				result = append(result, s.(uint64))
+			}
+		}
+		require.Equal(t, result, []uint64{3, 3, 4})
+	})
+}
+
+func IsClosed(ch Bi) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+	}
+
+	return false
+}
+
+func Factorial(n uint64) (result uint64) {
+	if n > 0 {
+		result = n * Factorial(n-1)
+		return result
+	}
+	return 1
+}
