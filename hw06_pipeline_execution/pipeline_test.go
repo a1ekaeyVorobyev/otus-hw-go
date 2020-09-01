@@ -165,7 +165,6 @@ func TestPipelineMy(t *testing.T) {
 		}
 		require.Equal(t, result, []uint64{3, 3, 4, 8, 26})
 	})
-
 	t.Run("Check Done", func(t *testing.T) {
 		in := make(Bi)
 		done := make(Bi)
@@ -174,11 +173,17 @@ func TestPipelineMy(t *testing.T) {
 
 		go func() {
 			for i, v := range data {
-				if i == 3 {
-					done <- 5
+				if i == 4 {
+					fmt.Println("1. i=", i)
+					if !IsClosed(done) {
+						done <- i
+					}
+					break
 				}
+				fmt.Println("2. i=", i)
 				in <- v
 			}
+			fmt.Println("Finish")
 			flag = false
 			close(in)
 		}()
