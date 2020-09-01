@@ -1,8 +1,8 @@
 package hw06_pipeline_execution //nolint:golint,stylecheck
 
 import (
-	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +13,11 @@ const (
 	sleepPerStage = time.Millisecond * 100
 	fault         = sleepPerStage / 2
 )
+
+type safeFlag struct {
+	flag bool
+	mux  sync.Mutex
+}
 
 func TestPipeline(t *testing.T) {
 	// Stage generator
@@ -148,20 +153,16 @@ func TestPipelineMy(t *testing.T) {
 	t.Run("Check Gage", func(t *testing.T) {
 		in := make(Bi)
 		data := []uint64{0, 1, 2, 3, 4}
-		flag := true
 		go func() {
 			for _, v := range data {
 				in <- v
 			}
-			flag = false
 			close(in)
 		}()
 		result := make([]uint64, 0, len(data))
 		stage := []Stage{g, g1}
-		for flag {
-			for s := range ExecutePipeline(in, nil, stage...) {
-				result = append(result, s.(uint64))
-			}
+		for s := range ExecutePipeline(in, nil, stage...) {
+			result = append(result, s.(uint64))
 		}
 		require.Equal(t, result, []uint64{3, 3, 4, 8, 26})
 	})
@@ -169,33 +170,24 @@ func TestPipelineMy(t *testing.T) {
 		in := make(Bi)
 		done := make(Bi)
 		data := []uint64{0, 1, 2, 3, 4}
-		flag := true
-
 		go func() {
 			for i, v := range data {
 				if i == 4 {
-					fmt.Println("1. i=", i)
 					if !IsClosed(done) {
 						done <- i
 					}
 					break
 				}
-				fmt.Println("2. i=", i)
 				in <- v
 			}
-			fmt.Println("Finish")
-			flag = false
 			close(in)
 		}()
 		result := make([]uint64, 0, len(data))
 		stage := []Stage{g, g1}
-		for flag {
-			for s := range ExecutePipeline(in, done, stage...) {
-				result = append(result, s.(uint64))
-			}
+		for s := range ExecutePipeline(in, done, stage...) {
+			result = append(result, s.(uint64))
 		}
 		close(done)
-		fmt.Println(result)
 		require.NotEqual(t, result, []uint64{3, 3, 4, 8, 26, 1})
 	})
 }
