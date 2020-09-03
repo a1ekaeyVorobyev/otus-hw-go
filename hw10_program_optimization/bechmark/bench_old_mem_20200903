@@ -1,0 +1,15 @@
+goos: linux
+goarch: amd64
+pkg: github.com/a1ekaeyVorobyev/otus-hw-go/hw10_program_optimization
+BenchmarkMy-8   	     100	 349128728 ns/op	134568114 B/op	 1713168 allocs/op
+BenchmarkMy-8   	      98	 359383183 ns/op	134571348 B/op	 1713170 allocs/op
+BenchmarkMy-8   	     100	 374167557 ns/op	134568896 B/op	 1713170 allocs/op
+BenchmarkMy-8   	     103	 359058955 ns/op	134564852 B/op	 1713168 allocs/op
+BenchmarkMy-8   	      92	 351701350 ns/op	134567175 B/op	 1713168 allocs/op
+BenchmarkMy-8   	      92	 364426978 ns/op	134570347 B/op	 1713169 allocs/op
+BenchmarkMy-8   	      90	 387948198 ns/op	134575183 B/op	 1713170 allocs/op
+BenchmarkMy-8   	      96	 347142439 ns/op	134569963 B/op	 1713168 allocs/op
+BenchmarkMy-8   	      99	 350040093 ns/op	134568782 B/op	 1713169 allocs/op
+BenchmarkMy-8   	     100	 358691872 ns/op	134567879 B/op	 1713170 allocs/op
+PASS
+ok  	github.com/a1ekaeyVorobyev/otus-hw-go/hw10_program_optimization	408.492s
