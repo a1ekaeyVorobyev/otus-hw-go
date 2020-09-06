@@ -17,6 +17,9 @@ func main() {
 		log.Fatal("Please enter the .go filename for go-validate")
 	}
 	nameFile := args[0]
+	if len(args) == 2 && args[1] == "false" {
+		geneateFileWithError = false
+	}
 	err := ParserFile(nameFile)
 	fmt.Print(nameFile)
 	if len(err) != 0 {

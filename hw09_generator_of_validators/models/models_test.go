@@ -1,4 +1,5 @@
-package main
+//go:generate go-validate $GOFILE
+package models
 
 import (
 	"net/http"
@@ -86,7 +87,7 @@ func TestUserValidation(t *testing.T) {
 			}
 		}
 		require.Equal(t, len(ve), k)
-		//t.Fail()
+		// t.Fail()
 	})
 
 	t.Run("many errors", func(t *testing.T) {

@@ -1,11 +1,11 @@
 /*
 * CODE GENERATED AUTOMATICALLY WITH go-validate
 * THIS FILE SHOULD NOT BE EDITED BY HAND
-* Date and time of file generation 2020.08.19 22:28:41
+* Date and time of file generation 2020.09.06 15:11:01
  */
 //nolint:gomnd,gofmt,goimports
 
-package main
+package models
 
 import (
 	"fmt"

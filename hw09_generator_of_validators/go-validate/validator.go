@@ -15,7 +15,11 @@ import (
 	"time"
 )
 
-var ErrWriteTag = errors.New("the tag was written with an error")
+// ErrWriteTag error return model.
+var (
+	ErrWriteTag          = errors.New("the tag was written with an error")
+	geneateFileWithError = true
+)
 
 const (
 	tInt    = "int"
@@ -24,12 +28,14 @@ const (
 	tString = "string"
 )
 
-type PE struct {
+// ParsErr it's struct from return.
+type ParsErr struct {
 	Message string
 	Err     error
 }
 
-type sCon struct {
+// StCon Struct from generete template.
+type StCon struct {
 	NameStruct string
 	Name       string
 	Conditions string
@@ -38,7 +44,8 @@ type sCon struct {
 	IsArray    bool
 }
 
-type Field struct {
+// StField Struct from generete template.
+type StField struct {
 	Name      string
 	TypeField string
 	Tag       string
@@ -70,6 +77,11 @@ func ({{.NamePer}} {{.NameStuct}}) Validate() ([]ValidationError, error) {
 
 	return ve, nil
 }`
+	textError = `
+	ve = append(ve, ValidationError{
+		Field:  "{{.Name}} does not generate the condition tag = {{.Tag}}. Field = {{.NameStruct}}.{{.Name}}",
+		Err:	fmt.Errorf("error with codegeneration"),
+	})`
 	textHeader = `
 /*
 * CODE GENERATED AUTOMATICALLY WITH go-validate
@@ -90,16 +102,17 @@ type ValidationError struct {
 	Field string
 	Err   error
 }
+
 `
 )
 
-// распарвивакм файл и записываем полученный результат в другой.
-func ParserFile(nameFile string) []PE {
-	pe := []PE{}
+// ParserFile распарвивакм файл и записываем полученный результат в другой.
+func ParserFile(nameFile string) []ParsErr {
+	pe := []ParsErr{}
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, nameFile, nil, parser.ParseComments)
 	if err != nil {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: err.Error(),
 			Err:     fmt.Errorf("error parse file"),
 		})
@@ -107,7 +120,7 @@ func ParserFile(nameFile string) []PE {
 		return pe
 	}
 	s, errPE := parse(node)
-	if len(errPE) != 0 {
+	if len(errPE) != 0 && !geneateFileWithError {
 		pe = append(pe, errPE...)
 		var result strings.Builder
 		result.WriteString("/*")
@@ -119,7 +132,7 @@ func ParserFile(nameFile string) []PE {
 		result.WriteString("*/")
 
 		if err = writeTextFile(nameFile, result.String()); err != nil {
-			pe = append(pe, PE{
+			pe = append(pe, ParsErr{
 				Message: "Error writing the file",
 				Err:     err,
 			})
@@ -129,7 +142,7 @@ func ParserFile(nameFile string) []PE {
 	}
 
 	if err = writeTextFile(nameFile, s); err != nil {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: "Error writing the file",
 			Err:     err,
 		})
@@ -138,8 +151,8 @@ func ParserFile(nameFile string) []PE {
 	return pe
 }
 
-func parse(node *ast.File) (string, []PE) {
-	pe := []PE{}
+func parse(node *ast.File) (string, []ParsErr) {
+	pe := []ParsErr{}
 	var result strings.Builder
 	t, err := getHeader(node.Name.Name)
 	if err != nil {
@@ -167,30 +180,17 @@ func parse(node *ast.File) (string, []PE) {
 				continue
 			}
 			nameStuct := currType.Name.Name
-			isHaveTag := false
-			aFiled := make([]Field, len(currStruct.Fields.List))
+			aFiled := make([]StField, len(currStruct.Fields.List))
 			for i, field := range currStruct.Fields.List {
 				if field.Tag != nil {
 					if strings.Contains(field.Tag.Value, "validate") {
-						isHaveTag = true
-						isArray := false
-						typeField := ""
-						switch v := field.Type.(type) {
-						case *ast.Ident:
-							typeField = v.Name
-							typeField = getTrueType(typeField, node)
-						case *ast.ArrayType:
-							elemType := v.Elt.(*ast.Ident).Name
-							typeField = getTrueType(elemType, node)
-							isArray = true
-						}
-						s := Field{Name: field.Names[0].Name, TypeField: typeField, Tag: field.Tag.Value, IsArray: isArray}
-						aFiled[i] = s
+						typeField, isArray := getType(field, node)
+						aFiled[i] = StField{Name: field.Names[0].Name, TypeField: typeField, Tag: field.Tag.Value, IsArray: isArray}
 					}
 				}
 			}
 
-			if isHaveTag {
+			if len(aFiled) > 0 {
 				t, err := getValidator(nameStuct, aFiled)
 				pe = append(pe, err...)
 				result.WriteString(t)
@@ -204,66 +204,106 @@ func parse(node *ast.File) (string, []PE) {
 	return result.String(), pe
 }
 
-// Получем с генирированные условия для структуры.
-func getValidator(n string, a []Field) (string, []PE) {
-	pe := []PE{}
-	var err error
-	t := template.New("")
-	buf := new(bytes.Buffer)
-	var result strings.Builder
+//
+func getType(field *ast.Field, node *ast.File) (string, bool) {
+	typeField := ""
+	isArray := false
+	if v, ok := field.Type.(*ast.Ident); ok {
+		typeField = v.Name
+	}
+	switch v := field.Type.(type) {
+	case *ast.Ident:
+		typeField = getTrueType(typeField, node)
+	case *ast.ArrayType:
+		elemType := v.Elt.(*ast.Ident).Name
+		typeField = getTrueType(elemType, node)
+		isArray = true
+	}
 
+	return typeField, isArray
+}
+
+// Получем сгенирированные условия для структуры.
+func getValidator(nameStruct string, a []StField) (string, []ParsErr) {
+	pe := []ParsErr{}
+	var result strings.Builder
+	var t string
+	nameValue := strings.ToLower(nameStruct)
+	if nameStruct == nameValue {
+		nameValue = "_" + nameValue
+	}
 	for _, l := range a {
+		var err []ParsErr
 		if l.Name == "" {
 			continue
 		}
-		v, err := getTag(l.Tag)
+		l.Tag, err = getTag(l.Tag)
 		if err != nil {
 			pe = append(pe, err...)
 
 			continue
 		}
-		l.Tag = v
-		v = fmt.Sprintf("\n\t //NameField = %s , Tag = %s , type =%s", l.Name, l.Tag, l.TypeField)
+		v := fmt.Sprintf("\n\t //NameField = %s , Tag = %s , type =%s", l.Name, l.Tag, l.TypeField)
 		result.WriteString(v)
 		switch l.TypeField {
 		case tInt:
 			fallthrough
-		case "int16":
-			fallthrough
 		case tInt32:
-			t, err := cCondInt(n, l)
-			if err != nil {
-				pe = append(pe, err...)
-
-				continue
-			}
-			result.WriteString(t)
+			fallthrough
+		case tInt64:
+			t, err = createCondInt(nameValue, l)
 		case tString:
-			t, err := cCondStr(n, l)
-			if err != nil {
-				pe = append(pe, err...)
-
-				continue
-			}
-			result.WriteString(t)
+			t, err = createCondStr(nameValue, l)
 		default:
-			pe = append(pe, PE{
+			err = append(err, ParsErr{
 				Message: fmt.Sprintf("this type- %s is not supported. %s", l.TypeField, v),
 				Err:     ErrWriteTag,
 			})
 		}
+		if err != nil {
+			if geneateFileWithError {
+				t, err := genError(nameStruct, l)
+				pe = append(pe, err...)
+				result.WriteString(t)
+			}
+			pe = append(pe, err...)
+		} else {
+			result.WriteString(t)
+		}
 	}
-	if len(pe) != 0 {
+	if len(pe) != 0 && !geneateFileWithError {
 		return "", pe
+	}
+	t, err := generateFromCond(nameStruct, textFunc, result)
+	if len(pe) != 0 && !geneateFileWithError {
+		pe = append(pe, err...)
+
+		return "", pe
+	}
+
+	return t, nil
+}
+
+// Генерим из шаблона условия.
+func generateFromCond(nameStruct, textFunc string, result strings.Builder) (string, []ParsErr) {
+	pe := []ParsErr{}
+	if result.String() == "" {
+		return "", pe
+	}
+	t := template.New("")
+	buf := new(bytes.Buffer)
+	nameVal := strings.ToLower(nameStruct)
+	if nameVal == nameStruct {
+		nameVal = "_" + nameVal
 	}
 	s := struct {
 		NamePer    string
 		NameStuct  string
 		Conditions string
-	}{NamePer: strings.ToLower(n), NameStuct: n, Conditions: result.String()}
+	}{NamePer: nameVal, NameStuct: nameStruct, Conditions: result.String()}
 
 	if _, err := t.Parse(textFunc); err != nil {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: "err.Error(error when generating from a template text function)",
 			Err:     fmt.Errorf("error when generating from a template text function"),
 		})
@@ -271,8 +311,8 @@ func getValidator(n string, a []Field) (string, []PE) {
 		return "", pe
 	}
 
-	if err = t.Execute(buf, s); err != nil {
-		pe = append(pe, PE{
+	if err := t.Execute(buf, s); err != nil {
+		pe = append(pe, ParsErr{
 			Message: "err.Error(error when generating from a template textConditions or textArrayConditions)",
 			Err:     fmt.Errorf("error when generating from a template textConditions or textArrayConditions"),
 		})
@@ -280,7 +320,7 @@ func getValidator(n string, a []Field) (string, []PE) {
 		return "", pe
 	}
 
-	return buf.String(), nil
+	return buf.String(), pe
 }
 
 // проверка соответствие значения для полей типа int int32 int64.
@@ -330,18 +370,17 @@ func getCondForInStr(v string) string {
 }
 
 // генерим условия для полей типа: int int32 int64.
-func cCondInt(n string, f Field) (string, []PE) {
-	pe := []PE{}
+func createCondInt(nameStruct string, f StField) (string, []ParsErr) {
+	pe := []ParsErr{}
 	var err error
-	n = strings.ToLower(n)
 	buf := new(bytes.Buffer)
 	tConditions := ""
+
 	for _, v := range strings.Split(f.Tag, "|") {
 		s := strings.Split(v, ":")
-
 		if len(s) != 2 {
-			pe = append(pe, PE{
-				Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, n, f.Name, v),
+			pe = append(pe, ParsErr{
+				Message: fmt.Sprintf("the tag %s struct  %s field %s was written with an error. %s", f.Tag, nameStruct, f.Name, v),
 				Err:     ErrWriteTag,
 			})
 
@@ -351,45 +390,33 @@ func cCondInt(n string, f Field) (string, []PE) {
 		case "min":
 
 			if !checkIntFiled(s[1], f.TypeField) {
-				pe = append(pe, PE{
-					Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, n, f.Name, v),
-					Err:     ErrWriteTag,
-				})
-
-				return "", pe
+				err = fmt.Errorf("the tag %s struct  %s field %s was written with an error. %s", f.Tag, nameStruct, f.Name, v)
 			}
 			tConditions = fmt.Sprintf(" nameField  < %v", s[1])
 		case "max":
 
 			if !checkIntFiled(s[1], f.TypeField) {
-				pe = append(pe, PE{
-					Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, n, f.Name, v),
-					Err:     ErrWriteTag,
-				})
-
-				return "", pe
+				err = fmt.Errorf("the tag %s struct  %s field %s was written with an error. %s", f.Tag, nameStruct, f.Name, v)
 			}
+
 			tConditions = fmt.Sprintf("nameField  > %v", s[1])
 		case "in":
-
-			if tConditions, err = getCondForInInt(s[1], f.TypeField); err != nil {
-				pe = append(pe, PE{
-					Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, n, f.Name, v),
-					Err:     ErrWriteTag,
-				})
-
-				return "", pe
-			}
+			tConditions, err = getCondForInInt(s[1], f.TypeField)
 		default:
-			pe = append(pe, PE{
-				Message: fmt.Sprintf("The tag was written with an error. %q", v),
+
+			err = fmt.Errorf("the tag was written with an error. %q", v)
+		}
+
+		if err != nil {
+			pe = append(pe, ParsErr{
+				Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, nameStruct, f.Name, v),
 				Err:     ErrWriteTag,
 			})
 
 			return "", pe
 		}
 
-		st := sCon{n, f.Name, tConditions, s[1], v, f.IsArray}
+		st := StCon{nameStruct, f.Name, tConditions, s[1], v, f.IsArray}
 		t, err := genCondition(st)
 
 		if len(err) != 0 {
@@ -404,17 +431,15 @@ func cCondInt(n string, f Field) (string, []PE) {
 }
 
 // генерим условия для полей типа string.
-func cCondStr(n string, f Field) (string, []PE) {
-	pe := []PE{}
-	n = strings.ToLower(n)
+func createCondStr(nameStruct string, f StField) (string, []ParsErr) {
+	pe := []ParsErr{}
 	buf := new(bytes.Buffer)
 	tConditions := ""
 	for _, v := range strings.Split(f.Tag, "|") {
 		s := strings.Split(v, ":")
-
 		if len(s) != 2 {
-			pe = append(pe, PE{
-				Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, n, f.Name, v),
+			pe = append(pe, ParsErr{
+				Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, nameStruct, f.Name, v),
 				Err:     ErrWriteTag,
 			})
 
@@ -422,8 +447,8 @@ func cCondStr(n string, f Field) (string, []PE) {
 		}
 
 		if strings.TrimSpace(s[1]) == "" {
-			pe = append(pe, PE{
-				Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, n, f.Name, v),
+			pe = append(pe, ParsErr{
+				Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, nameStruct, f.Name, v),
 				Err:     ErrWriteTag,
 			})
 
@@ -431,10 +456,9 @@ func cCondStr(n string, f Field) (string, []PE) {
 		}
 		switch s[0] {
 		case "len":
-
 			if !checkIntFiled(s[1], tInt) {
-				pe = append(pe, PE{
-					Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, n, f.Name, v),
+				pe = append(pe, ParsErr{
+					Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, nameStruct, f.Name, v),
 					Err:     ErrWriteTag,
 				})
 
@@ -446,16 +470,15 @@ func cCondStr(n string, f Field) (string, []PE) {
 		case "in":
 			tConditions = getCondForInStr(s[1])
 		default:
-			pe = append(pe, PE{
-				Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, n, f.Name, v),
+			pe = append(pe, ParsErr{
+				Message: fmt.Sprintf("The tag %s struct  %s field %s was written with an error. %s", f.Tag, nameStruct, f.Name, v),
 				Err:     ErrWriteTag,
 			})
 
 			return "", pe
 		}
-		st := sCon{n, f.Name, tConditions, s[1], v, f.IsArray}
+		st := StCon{nameStruct, f.Name, tConditions, s[1], v, f.IsArray}
 		t, err := genCondition(st)
-
 		if len(err) != 0 {
 			pe = append(pe, err...)
 
@@ -467,8 +490,9 @@ func cCondStr(n string, f Field) (string, []PE) {
 	return buf.String(), nil
 }
 
-func genCondition(st sCon) (string, []PE) {
-	pe := []PE{}
+//  генирим шаблоны
+func genCondition(st StCon) (string, []ParsErr) {
+	pe := []ParsErr{}
 	text := ""
 	buf := new(bytes.Buffer)
 	t := template.New("")
@@ -481,16 +505,45 @@ func genCondition(st sCon) (string, []PE) {
 		text = textConditions
 	}
 	if _, err := t.Parse(text); err != nil {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: "err.Error(error when generating from a template text textConditions)",
 			Err:     fmt.Errorf("error when generating from a template text textConditions"),
 		})
 
 		return "", pe
 	}
-
 	if err := t.Execute(buf, st); err != nil {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
+			Message: "err.Error(error when generating from a template textConditions or textArrayConditions)",
+			Err:     fmt.Errorf("error when generating from a template textConditions or textArrayConditions"),
+		})
+
+		return "", pe
+	}
+
+	return buf.String(), nil
+}
+
+//  генирим шаблоны еггог
+func genError(nameStruct string, f StField) (string, []ParsErr) {
+	buf := new(bytes.Buffer)
+	pe := []ParsErr{}
+	st := StCon{nameStruct, f.Name, "", f.Tag, f.Tag, f.IsArray}
+	t := template.New("")
+	/*
+		v := fmt.Sprintf("\n\t //NameField = %s , Tag = %s , type =%s", l.Name, l.Tag, l.TypeField)
+		result.WriteString(v)
+	*/
+	if _, err := t.Parse(textError); err != nil {
+		pe = append(pe, ParsErr{
+			Message: "err.Error(error when generating from a template text textConditions)",
+			Err:     fmt.Errorf("error when generating from a template text textConditions"),
+		})
+
+		return "", pe
+	}
+	if err := t.Execute(buf, st); err != nil {
+		pe = append(pe, ParsErr{
 			Message: "err.Error(error when generating from a template textConditions or textArrayConditions)",
 			Err:     fmt.Errorf("error when generating from a template textConditions or textArrayConditions"),
 		})
@@ -503,12 +556,12 @@ func genCondition(st sCon) (string, []PE) {
 
 // берем Tag проверям его и получаем его назад в более простой форме
 // напримеg validate:"min:36" json:"id" validate:"max:66=>min:36|max:66.
-func getTag(tag string) (string, []PE) {
-	pe := []PE{}
+func getTag(tag string) (string, []ParsErr) {
+	pe := []ParsErr{}
 	var result strings.Builder
 
 	if !strings.Contains(tag, "validate") {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: fmt.Sprintf("it does not contain key word validate. %s", tag),
 			Err:     ErrWriteTag,
 		})
@@ -518,7 +571,7 @@ func getTag(tag string) (string, []PE) {
 	a := strings.Split(tag, " ")
 	for _, t := range a {
 		if strings.Contains(t, "validate") {
-			t, err := pacTag(t)
+			t, err := checkTag(t)
 			if err != nil {
 				pe = append(pe, err...)
 
@@ -533,14 +586,14 @@ func getTag(tag string) (string, []PE) {
 }
 
 // Проверка и получение Таг  нужном нам виде.
-func pacTag(tag string) (string, []PE) {
-	pe := []PE{}
+func checkTag(tag string) (string, []ParsErr) {
+	pe := []ParsErr{}
 	tag = strings.TrimSpace(tag)
 	index := strings.Index(tag, "\"")
 	tag = tag[index+1:]
 
 	if index < 0 {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: fmt.Sprintf("The tag was written with an error. %s", tag),
 			Err:     ErrWriteTag,
 		})
@@ -550,7 +603,7 @@ func pacTag(tag string) (string, []PE) {
 	index = strings.LastIndex(tag, "\"")
 
 	if index < 1 {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: fmt.Sprintf("The tag was written with an error. %s", tag),
 			Err:     ErrWriteTag,
 		})
@@ -560,7 +613,7 @@ func pacTag(tag string) (string, []PE) {
 	tag = tag[:index]
 
 	if strings.Contains(tag, `"`) {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: fmt.Sprintf("The tag was written with an error. %s", tag),
 			Err:     ErrWriteTag,
 		})
@@ -588,8 +641,8 @@ func writeTextFile(n, t string) error {
 }
 
 // генерим заголовок файла.
-func getHeader(n string) (string, []PE) {
-	pe := []PE{}
+func getHeader(n string) (string, []ParsErr) {
+	pe := []ParsErr{}
 	t := template.New("")
 	s := struct {
 		NamePackeg string
@@ -598,7 +651,7 @@ func getHeader(n string) (string, []PE) {
 	buf := new(bytes.Buffer)
 
 	if _, err := t.Parse(textHeader); err != nil {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: "err.Error(error when generating from a template text textHeader)",
 			Err:     fmt.Errorf("error when generating from a template text textHeader"),
 		})
@@ -606,7 +659,7 @@ func getHeader(n string) (string, []PE) {
 		return "", pe
 	}
 	if err := t.Execute(buf, s); err != nil {
-		pe = append(pe, PE{
+		pe = append(pe, ParsErr{
 			Message: err.Error(),
 			Err:     fmt.Errorf("error when generating from a template textHeader"),
 		})
