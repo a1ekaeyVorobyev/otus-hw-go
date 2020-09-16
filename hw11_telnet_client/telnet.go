@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net"
@@ -14,12 +13,9 @@ var _ TelnetClient = (*client)(nil)
 type TelnetClient interface {
 	// Place your code here
 	Connect() error
-	Close() error
 	GetAdress() string
 	Receive() error
 	Send() error
-	Cancel()
-	GetContext() context.Context
 }
 
 type client struct {
@@ -28,16 +24,13 @@ type client struct {
 	in      io.ReadCloser
 	out     io.Writer
 	con     net.Conn
-	ctx     context.Context
-	cancel  context.CancelFunc
 }
 
 // NewTelnetClient create new telnetClient.
 func NewTelnetClient(address string, timeout time.Duration, in io.ReadCloser, out io.Writer) TelnetClient {
 	// Place your code here
-	ctx, cancel := context.WithCancel(context.Background())
 
-	return &client{address: address, timeout: timeout, in: in, out: out, ctx: ctx, cancel: cancel}
+	return &client{address: address, timeout: timeout, in: in, out: out}
 }
 
 // Place your code here
@@ -48,20 +41,8 @@ func (c *client) Connect() (err error) {
 	return
 }
 
-func (c *client) Close() error {
-	if c.con == nil {
-		return fmt.Errorf("tcp connection is nil")
-	}
-
-	return c.con.Close()
-}
-
 func (c *client) GetAdress() string {
 	return c.address
-}
-
-func (c *client) Cancel() {
-	c.cancel()
 }
 
 func (c *client) Send() (e error) {
@@ -80,8 +61,4 @@ func (c *client) Receive() (err error) {
 	_, err = io.Copy(c.out, c.con)
 
 	return
-}
-
-func (c *client) GetContext() context.Context {
-	return c.ctx
 }
