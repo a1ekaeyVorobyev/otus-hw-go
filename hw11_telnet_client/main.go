@@ -36,8 +36,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan bool, 1)
 
-	go hanlerRead(ctx, c, ch)
-	go handlerwriter(ctx, c, ch)
+	go hanlerRead(c, ch)
+	go handlerwriter(c, ch)
 
 	go func() {
 		sigs := make(chan os.Signal, 1)
@@ -58,7 +58,7 @@ exit:
 	log.Println("Exit telnet.")
 }
 
-func hanlerRead(ctx context.Context, tc TelnetClient, ch chan bool) {
+func hanlerRead(tc TelnetClient, ch chan bool) {
 	defer func() { ch <- true }()
 
 	if err := tc.Receive(); err != nil { // if server close connect this routine is exit but we wait some unsuccessful attempts to send in writeRoutine
@@ -66,25 +66,13 @@ func hanlerRead(ctx context.Context, tc TelnetClient, ch chan bool) {
 
 		return
 	}
-
-	for {
-		<-ctx.Done()
-
-		return
-	}
 }
 
-func handlerwriter(ctx context.Context, tc TelnetClient, ch chan bool) {
+func handlerwriter(tc TelnetClient, ch chan bool) {
 	defer func() { ch <- true }()
 
 	if err := tc.Send(); err != nil {
 		fmt.Fprintf(os.Stderr, "...Connection was closed by peer\n") // an error occurs if server sent ctrl + c (close) and client execute some unsuccessful attempts to send
-
-		return
-	}
-
-	for {
-		<-ctx.Done()
 
 		return
 	}
