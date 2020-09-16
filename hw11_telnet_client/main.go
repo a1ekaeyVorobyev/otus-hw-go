@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -33,7 +32,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan bool, 1)
 
 	go hanlerRead(c, ch)
@@ -43,14 +41,12 @@ func main() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 		<-sigs
-		cancel()
+		ch <- true
 	}()
 
 exit:
 	for {
 		select {
-		case <-ctx.Done():
-			break exit
 		case <-ch:
 			break exit
 		}
