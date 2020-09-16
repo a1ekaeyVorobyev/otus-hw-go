@@ -111,6 +111,8 @@ func TestTelnetMy(t *testing.T) {
 		err = c.Receive()
 		require.NoError(t, err)
 		require.Equal(t, "world\n", out.String())
+
+		c.Close()
 	})
 	t.Run("Check Connect Recive", func(t *testing.T) {
 		out := &bytes.Buffer{}
@@ -146,6 +148,8 @@ func TestTelnetMy(t *testing.T) {
 		err = c.Receive()
 		require.NoError(t, err)
 		require.Equal(t, text, out.String())
+
+		c.Close()
 	})
 	t.Run("Check Connect Send", func(t *testing.T) {
 		out := &bytes.Buffer{}
@@ -179,6 +183,8 @@ func TestTelnetMy(t *testing.T) {
 		in.WriteString(text)
 		err = c.Send()
 		require.NoError(t, err)
+
+		c.Close()
 	})
 	t.Run("Check Connect Send and Recive", func(t *testing.T) {
 		out := &bytes.Buffer{}
@@ -220,6 +226,8 @@ func TestTelnetMy(t *testing.T) {
 		err = c.Receive()
 		require.NoError(t, err)
 		require.Equal(t, text, out.String())
+
+		c.Close()
 	})
 	wg.Wait()
 }

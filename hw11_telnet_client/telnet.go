@@ -16,6 +16,7 @@ type TelnetClient interface {
 	GetAdress() string
 	Receive() error
 	Send() error
+	Close() error
 }
 
 type client struct {
@@ -61,4 +62,13 @@ func (c *client) Receive() (err error) {
 	_, err = io.Copy(c.out, c.con)
 
 	return
+}
+
+// Close closes connect.
+func (c *client) Close() error {
+	if c.con == nil {
+		return fmt.Errorf("tcp connection is nil")
+	}
+
+	return c.con.Close()
 }

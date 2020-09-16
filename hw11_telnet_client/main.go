@@ -45,6 +45,7 @@ func main() {
 	}()
 
 	<-ch
+	c.Close()
 	log.Println("Exit telnet.")
 }
 
