@@ -44,13 +44,7 @@ func main() {
 		ch <- true
 	}()
 
-exit:
-	for {
-		select {
-		case <-ch:
-			break exit
-		}
-	}
+	<-ch
 	log.Println("Exit telnet.")
 }
 
